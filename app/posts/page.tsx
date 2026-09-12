@@ -92,7 +92,7 @@ export default function PostsPage() {
               onChange={(e) => setIsAnonymous(e.target.checked)}
               className="w-4 h-4 rounded border-gray-300"
             />
-            <span>Đăng bài dưới danh nghĩa ẩn danh</span>
+            <span>Đăng bài ẩn danh</span>
           </label>
           <button
             type="submit"
