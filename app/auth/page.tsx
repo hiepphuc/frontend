@@ -38,8 +38,12 @@ export default function AuthPage() {
         if (error) throw error;
 
         if (data.session) {
-          // ... code trước đó
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/sync`, {
+          // ... code trước đó ...
+
+          // Ưu tiên dùng biến môi trường, nếu rỗng thì ép cứng luôn vào localhost:3000
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+          const res = await fetch(`${API_URL}/auth/sync`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -48,13 +52,14 @@ export default function AuthPage() {
             body: JSON.stringify({ username: username.trim(), studentId: studentId.trim() }),
           });
 
+          // Hiển thị lỗi chi tiết từ backend nếu có
           if (!res.ok) {
-            // Đọc lỗi chi tiết từ NestJS trả về
-            const errorData = await res.json();
+            const errorData = await res.json().catch(() => ({}));
             throw new Error(errorData.message || "Lỗi khi đồng bộ dữ liệu vào Database");
           }
           setMessage("Đăng ký thành công!");
-          // ... code sau đó
+
+          // ... code sau đó ...
         } else {
           setMessage("Vui lòng kiểm tra email để xác nhận!");
         }
