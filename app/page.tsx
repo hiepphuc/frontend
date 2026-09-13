@@ -60,16 +60,61 @@ export default function Home() {
     }
   };
 
-  // Hàm xử lý Reaction (Upvote/Like...)
+  // Hàm xử lý Reaction (Upvote/Like...) với cơ chế Optimistic UI
   const handleReact = async (postId: string, reactionType: string) => {
     if (!session) return;
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/posts/${postId}/react`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ type: reactionType }),
-    });
-    // Gọi lại API để load số liệu mới nhất mà không reload trang
-    if (res.ok) fetchPosts(session.access_token, filter);
+    const userId = session.user.id;
+
+    // 1. Lưu lại bản sao của trạng thái hiện tại (để hoàn tác nếu rớt mạng)
+    const previousPosts = [...posts];
+
+    // 2. CẬP NHẬT UI NGAY LẬP TỨC (Không cần chờ API)
+    setPosts(currentPosts =>
+      currentPosts.map(post => {
+        if (post.id !== postId) return post; // Bỏ qua các bài viết khác
+
+        // Tìm xem user đã react bài này chưa
+        const existingReactionIndex = post.reactions.findIndex((r: any) => r.userId === userId);
+        let newReactions = [...post.reactions];
+
+        if (existingReactionIndex !== -1) {
+          if (newReactions[existingReactionIndex].type === reactionType) {
+            // Trường hợp 1: Bấm lại đúng nút cũ -> Xoá (Unlike/Unvote)
+            newReactions.splice(existingReactionIndex, 1);
+          } else {
+            // Trường hợp 2: Đang Like chuyển sang Thả tim -> Đổi type
+            newReactions[existingReactionIndex] = {
+              ...newReactions[existingReactionIndex],
+              type: reactionType
+            };
+          }
+        } else {
+          // Trường hợp 3: Chưa react bao giờ -> Thêm mới
+          newReactions.push({ id: 'temp-id', userId, postId, type: reactionType });
+        }
+
+        return { ...post, reactions: newReactions };
+      })
+    );
+
+    // 3. GỌI API NGẦM BÊN DƯỚI
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/posts/${postId}/react`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ type: reactionType }),
+      });
+
+      if (!res.ok) throw new Error("API Error");
+
+    } catch (error) {
+      // 4. Nếu lỗi (server sập, mất mạng) -> Hoàn tác lại UI như cũ
+      console.error("Lỗi kết nối, đang hoàn tác cảm xúc...");
+      setPosts(previousPosts);
+    }
   };
 
   // Helper tính toán hiển thị cho Discussion
