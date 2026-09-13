@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 export default function AuthPage() {
+  const router = useRouter(); // Khởi tạo router
   const [isLogin, setIsLogin] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,22 +17,20 @@ export default function AuthPage() {
     e.preventDefault();
     setMessage("Đang xử lý...");
 
-    // Tự động xóa khoảng trắng thừa ở đầu/cuối
     const safeEmail = email.trim();
     const safePassword = password.trim();
 
     try {
       if (isLogin) {
-        // ĐĂNG NHẬP
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { error } = await supabase.auth.signInWithPassword({
           email: safeEmail,
           password: safePassword,
         });
         if (error) throw error;
-        setMessage("Đăng nhập thành công! Đang lưu session...");
-        console.log("Token:", data.session.access_token);
+
+        // Đăng nhập thành công -> Chuyển về trang chủ
+        router.push("/");
       } else {
-        // ĐĂNG KÝ
         const { data, error } = await supabase.auth.signUp({
           email: safeEmail,
           password: safePassword,
@@ -38,11 +38,7 @@ export default function AuthPage() {
         if (error) throw error;
 
         if (data.session) {
-          // ... code trước đó ...
-
-          // Ưu tiên dùng biến môi trường, nếu rỗng thì ép cứng luôn vào localhost:3000
           const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-
           const res = await fetch(`${API_URL}/auth/sync`, {
             method: "POST",
             headers: {
@@ -52,14 +48,13 @@ export default function AuthPage() {
             body: JSON.stringify({ username: username.trim(), studentId: studentId.trim() }),
           });
 
-          // Hiển thị lỗi chi tiết từ backend nếu có
           if (!res.ok) {
             const errorData = await res.json().catch(() => ({}));
             throw new Error(errorData.message || "Lỗi khi đồng bộ dữ liệu vào Database");
           }
-          setMessage("Đăng ký thành công!");
 
-          // ... code sau đó ...
+          // Đăng ký và Sync thành công -> Chuyển về trang chủ
+          router.push("/");
         } else {
           setMessage("Vui lòng kiểm tra email để xác nhận!");
         }
