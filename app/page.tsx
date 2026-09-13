@@ -192,7 +192,7 @@ export default function Home() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white ${post.isAnonymous ? 'bg-zinc-400 dark:bg-zinc-700' : 'bg-gradient-to-tr from-blue-500 to-purple-500'}`}>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white ${post.isAnonymous ? 'bg-zinc-400 dark:bg-zinc-700' : 'bg-linear-to-tr from-blue-500 to-purple-500'}`}>
                     {post.isAnonymous ? "?" : post.author?.username?.charAt(0).toUpperCase()}
                   </div>
                   <div>
@@ -229,7 +229,7 @@ export default function Home() {
                   ) : (
                     comments.map((comment) => (
                       <div key={comment.id} className="flex space-x-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 mt-1 ${comment.isAnonymous ? 'bg-zinc-400' : 'bg-gradient-to-tr from-blue-500 to-purple-500'}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 mt-1 ${comment.isAnonymous ? 'bg-zinc-400' : 'bg-linear-to-tr from-blue-500 to-purple-500'}`}>
                           {comment.isAnonymous ? "?" : comment.author?.username?.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800">
