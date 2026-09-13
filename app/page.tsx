@@ -1,15 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   MessageCircle, Send, Users, Shield, Zap,
-  ThumbsUp, Lightbulb, PartyPopper, Smile, ArrowBigUp, ArrowBigDown
+  ThumbsUp, Lightbulb, PartyPopper, Smile, ArrowBigUp, ArrowBigDown, Loader2
 } from "lucide-react";
 import Link from "next/link";
 
 export default function Home() {
-  // 1. Thay posts thành allPosts (Kho chứa toàn bộ bài viết)
   const [allPosts, setAllPosts] = useState<any[]>([]);
 
   const [title, setTitle] = useState("");
@@ -17,6 +16,12 @@ export default function Home() {
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [postType, setPostType] = useState<'DISCUSSION' | 'QA'>('DISCUSSION');
   const [filter, setFilter] = useState<'ALL' | 'DISCUSSION' | 'QA'>('ALL');
+
+  // --- STATE PHÂN TRANG (PAGINATION) ---
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
+  const observerTarget = useRef<HTMLDivElement>(null); // Điểm đánh dấu cuối trang
 
   const [message, setMessage] = useState("");
   const [session, setSession] = useState<any>(null);
@@ -27,29 +32,53 @@ export default function Home() {
   const [commentContent, setCommentContent] = useState("");
   const [isCommentAnon, setIsCommentAnon] = useState(false);
 
-  // 2. Chỉ gọi API ĐÚNG 1 LẦN khi vào trang (Xóa filter khỏi dependency)
+  // 1. Khi đổi Filter hoặc khởi tạo -> Reset lại trang 1
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoadingSession(false);
-      if (session) fetchPosts(session.access_token);
+      if (session) {
+        setPage(1);
+        setHasMore(true);
+        loadPosts(session.access_token, 1, filter, true);
+      }
     });
-  }, []);
+  }, [filter]);
 
-  // 3. Luôn fetch TẤT CẢ bài viết từ backend để lưu vào kho
-  const fetchPosts = async (token: string) => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/posts?filter=ALL`, {
+  // 2. Hàm Tải Dữ Liệu
+  const loadPosts = async (token: string, pageNum: number, currentFilter: string, isReset: boolean = false) => {
+    setIsFetching(true);
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/posts?filter=${currentFilter}&page=${pageNum}&limit=5`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+
     if (res.ok) {
-      setAllPosts(await res.json());
+      const data = await res.json();
+      // Nếu số bài trả về ít hơn 5 -> Đã hết dữ liệu trong DB
+      if (data.length < 5) setHasMore(false);
+
+      setAllPosts(prev => isReset ? data : [...prev, ...data]);
     }
+    setIsFetching(false);
   };
 
-  // 4. BỘ LỌC TỐC ĐỘ CAO (Client-side): Tự động tính toán lại mỗi khi đổi Tab filter
-  const displayedPosts = filter === 'ALL'
-    ? allPosts
-    : allPosts.filter(post => post.type === filter);
+  // 3. Logic Cuộn vô hạn (Intersection Observer)
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      // Khi thẻ div cuối cùng lọt vào tầm nhìn && còn dữ liệu && không bận tải
+      if (entries[0].isIntersecting && hasMore && !isFetching) {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        loadPosts(session?.access_token, nextPage, filter, false);
+      }
+    }, { threshold: 0.1 }); // Kích hoạt khi cuộn thấy 10% thẻ div đánh dấu
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasMore, isFetching, page, filter, session]);
 
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,8 +94,10 @@ export default function Home() {
     if (res.ok) {
       setMessage("Đăng bài thành công!");
       setTitle(""); setContent(""); setIsAnonymous(false); setPostType('DISCUSSION');
-      // Lấy lại danh sách mới sau khi đăng
-      fetchPosts(session.access_token);
+      // Đăng xong tải lại trang 1 để thấy bài mới
+      setPage(1);
+      setHasMore(true);
+      loadPosts(session.access_token, 1, filter, true);
       setTimeout(() => setMessage(""), 3000);
     }
   };
@@ -76,7 +107,6 @@ export default function Home() {
     const userId = session.user.id;
     const previousPosts = [...allPosts];
 
-    // Cập nhật Optimistic UI vào kho allPosts
     setAllPosts(currentPosts =>
       currentPosts.map(post => {
         if (post.id !== postId) return post;
@@ -104,7 +134,6 @@ export default function Home() {
       });
       if (!res.ok) throw new Error("API Error");
     } catch (error) {
-      console.error("Lỗi kết nối, đang hoàn tác cảm xúc...");
       setAllPosts(previousPosts);
     }
   };
@@ -176,7 +205,6 @@ export default function Home() {
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6 font-sans pb-20">
 
-      {/* KHU VỰC ĐĂNG BÀI */}
       <form onSubmit={handleCreatePost} className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-800">
         <div className="flex gap-4 mb-4">
           <button type="button" onClick={() => setPostType('DISCUSSION')} className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${postType === 'DISCUSSION' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
@@ -204,7 +232,6 @@ export default function Home() {
         </div>
       </form>
 
-      {/* THANH TABS LỌC BẢNG TIN */}
       <div className="flex space-x-2 border-b border-zinc-200 dark:border-zinc-800 pb-px">
         {['ALL', 'DISCUSSION', 'QA'].map((tab) => (
           <button
@@ -217,12 +244,11 @@ export default function Home() {
         ))}
       </div>
 
-      {/* 5. Render bằng danh sách đã được lọc: displayedPosts */}
       <div className="space-y-6">
-        {displayedPosts.length === 0 ? (
-          <div className="text-center py-10 text-zinc-500">Chưa có bài viết nào trong mục này.</div>
+        {allPosts.length === 0 && !isFetching ? (
+          <div className="text-center py-10 text-zinc-500">Chưa có bài viết nào.</div>
         ) : (
-          displayedPosts.map((post) => {
+          allPosts.map((post) => {
             const upvotes = countReaction(post.reactions, 'UPVOTE');
             const downvotes = countReaction(post.reactions, 'DOWNVOTE');
             const qaScore = upvotes - downvotes;
@@ -253,9 +279,7 @@ export default function Home() {
                       <button onClick={() => handleReact(post.id, 'UPVOTE')} className={`p-2 rounded-l-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors ${hasReacted(post.reactions, 'UPVOTE') ? 'text-orange-500' : 'text-zinc-500'}`}>
                         <ArrowBigUp className="w-5 h-5" fill={hasReacted(post.reactions, 'UPVOTE') ? 'currentColor' : 'none'} />
                       </button>
-                      <span className={`px-2 font-bold text-sm ${qaScore > 0 ? 'text-orange-500' : qaScore < 0 ? 'text-blue-500' : 'text-zinc-600 dark:text-zinc-400'}`}>
-                        {qaScore}
-                      </span>
+                      <span className={`px-2 font-bold text-sm ${qaScore > 0 ? 'text-orange-500' : qaScore < 0 ? 'text-blue-500' : 'text-zinc-600 dark:text-zinc-400'}`}>{qaScore}</span>
                       <button onClick={() => handleReact(post.id, 'DOWNVOTE')} className={`p-2 rounded-r-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors ${hasReacted(post.reactions, 'DOWNVOTE') ? 'text-blue-500' : 'text-zinc-500'}`}>
                         <ArrowBigDown className="w-5 h-5" fill={hasReacted(post.reactions, 'DOWNVOTE') ? 'currentColor' : 'none'} />
                       </button>
@@ -285,6 +309,7 @@ export default function Home() {
 
                 {activePostId === post.id && (
                   <div className="px-6 py-4 bg-zinc-50 dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800">
+                    {/* ... (Giữ nguyên logic comments render) ... */}
                     <div className="space-y-4 mb-6">
                       {comments.length === 0 ? (
                         <p className="text-sm text-center text-zinc-500 italic">Chưa có bình luận nào. Hãy là người đầu tiên!</p>
@@ -327,6 +352,18 @@ export default function Home() {
               </div>
             );
           })
+        )}
+
+        {/* THẺ DIV ĐÁNH DẤU CUỐI TRANG CHO OBSERVER */}
+        {hasMore && (
+          <div ref={observerTarget} className="py-8 flex justify-center items-center">
+            {isFetching && <Loader2 className="w-6 h-6 animate-spin text-blue-500" />}
+          </div>
+        )}
+        {!hasMore && allPosts.length > 0 && (
+          <div className="text-center py-8 text-sm text-zinc-500">
+            Bạn đã xem hết bảng tin 🎉
+          </div>
         )}
       </div>
     </div>
